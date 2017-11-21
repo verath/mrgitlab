@@ -4,17 +4,33 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/Sirupsen/logrus"
-	"github.com/pkg/errors"
-	"github.com/verath/mrgitlab/lib/gitlab"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/Sirupsen/logrus"
+	"github.com/pkg/errors"
+	"github.com/verath/mrgitlab/lib/gitlab"
 )
 
 // handleWebhookTimeout specifies the max amount of
 // time that may elapse while handling a webhook
 const handleWebhookTimeout = 2 * time.Minute
+
+// MergeRequestHandler is a handler for handling merge requests
+// events, triggered via GitLab webhooks. The assumption for a
+// MergeRequestHandler is that it performs some action and then
+// wants to add a comment back to the merge request providing some
+// additional context.
+type MergeRequestHandler interface {
+	// HandleMergeRequest is called when a merge request webhook have
+	// been received. The HandleMergeRequest must return the context's
+	// error should the context become cancelled before the handler
+	// can finish. The HandleMergeRequest must not modify the provided
+	// MergeRequestWebhook data. On success, a string may be returned
+	// which will be appended to a new note added to the merge request.
+	HandleMergeRequest(context.Context, *gitlab.MergeRequestWebhook) (string, error)
+}
 
 // App is the entry-point to the mrgitlab application. It implements
 // the http handler interface for handling webhooks and should be registered
@@ -87,7 +103,8 @@ func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(context.Background(), handleWebhookTimeout)
 		defer cancel()
 		if err := app.onMergeRequestWebhook(ctx, webhook); err != nil {
-			app.logger.Debugf("Error handling webhook: %+v", err)
+			app.logger.Errorf("Error handling webhook: %v", err)
+			app.logger.Debugf("%+v", err)
 		}
 	}()
 }
@@ -138,7 +155,7 @@ func (app *App) onMergeRequestWebhook(ctx context.Context, webhook *gitlab.Merge
 	}
 	var resultsChs []chan handlerResult
 	for _, handler := range handlers {
-		resultCh := make(chan handlerResult)
+		resultCh := make(chan handlerResult, 1)
 		go func(handler MergeRequestHandler) {
 			msg, err := handler.HandleMergeRequest(ctx, webhook)
 			resultCh <- handlerResult{msg, err}
@@ -151,8 +168,7 @@ func (app *App) onMergeRequestWebhook(ctx context.Context, webhook *gitlab.Merge
 	for _, resultCh := range resultsChs {
 		res := <-resultCh
 		if res.err != nil {
-			app.logger.Debugf("Handler had an error in HandleMergeRequest: %+v", res.err)
-			continue
+			return errors.Wrap(res.err, "handler error during HandleMergeRequest")
 		}
 		if len(res.msg) > 0 {
 			noteMessageBuf.WriteString(res.msg)

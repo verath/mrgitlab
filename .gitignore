@@ -1,2 +1,5 @@
 .idea
 *.iml
+
+# Build output
+*.exe

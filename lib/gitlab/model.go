@@ -36,7 +36,7 @@ func NewMergeRequestID(webhook *MergeRequestWebhook) MergeRequestID {
 	}
 }
 
-// Notes are comments on GitLab snippets, issues or merge requests.
+// A Note is a comment on GitLab snippets, issues or merge requests.
 // https://docs.gitlab.com/ee/api/notes.html
 type Note struct {
 	// Body is the markdown text content of the note.

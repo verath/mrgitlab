@@ -5,10 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Sirupsen/logrus"
-	"github.com/pkg/errors"
 	"net/http"
 	"net/url"
+
+	"github.com/Sirupsen/logrus"
+	"github.com/pkg/errors"
 )
 
 // Client is a client for the GitLab v4 REST api.
